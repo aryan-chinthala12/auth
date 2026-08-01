@@ -83,7 +83,7 @@ func NewPostgresStorage(ctx context.Context, port uint16, dbUser, dbPass, dbName
 	return &PostgresStorage{pool: pool}, nil
 }
 
-/* Close closes the database connection pool. */
+// Close closes the database connection pool.
 func (p *PostgresStorage) Close() error {
 	if p.pool != nil {
 		p.pool.Close()

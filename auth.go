@@ -170,6 +170,7 @@ type smtpEmailSender struct {
 	port     string
 }
 
+// SendEmail sends an email with the specified subject and body to the given recipient.
 func (s *smtpEmailSender) SendEmail(ctx context.Context, to, subject, body string) error {
 	return email.Send(s.host, s.port, s.email, string(s.password), to, subject, body)
 }
