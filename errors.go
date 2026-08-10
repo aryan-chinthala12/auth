@@ -3,7 +3,7 @@ package auth
 import "errors"
 
 var (
-	/* ErrNotInitialized indicates the auth package has not been configured.*/
+	/* ErrNotInitialized indicates the auth package has not been configured. */
 	ErrNotInitialized = errors.New("auth package not initialized")
 	/* ErrDatabaseUnavailable indicates the configured storage backend is unavailable. */
 	ErrDatabaseUnavailable = errors.New("database connection unavailable")
