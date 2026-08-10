@@ -266,6 +266,7 @@ func (rl *RedisRateLimiter) Remaining(ctx context.Context, key string) (int, err
 	return remaining, nil
 }
 
+/* Reset clears the rate limit state for a specific key in the Redis-backed limiter. */
 func (rl *RedisRateLimiter) Reset(ctx context.Context, key string) error {
 	if key == "" {
 		return ErrEmptyInput

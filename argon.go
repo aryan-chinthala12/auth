@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+/* ArgonParameters configures the Argon2id hash function used for password hashing. */
 type ArgonParameters struct {
 	Time    uint32 /* number of iterations */
 	Memory  uint32 /* in KB */
