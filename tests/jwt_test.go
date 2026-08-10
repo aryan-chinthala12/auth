@@ -206,12 +206,13 @@ func FuzzValidateToken(f *testing.F) {
 	f.Add("not.even.base64!!!")
 	f.Add("")
 
-	f.Fuzz(func(t *testing.T, token string) {
-		/* Use functional options for init as required by the new design */
-		a, err := auth.New(context.Background(), auth.WithJWT([]byte("fuzz-secret"), time.Hour))
+	a, err := auth.New(context.Background(), auth.WithJWT([]byte("fuzz-secret"), time.Hour))
 		if err != nil {
-			t.Fatalf("failed to init auth: %v", err)
+			f.Fatalf("failed to init auth: %v", err)
 		}
+	f.Fuzz(func(t *testing.T, token string) {
+		
+		
 
 		/* ValidateToken should not panic, it should cleanly return an error for invalid input */
 		_, _ = a.ValidateToken(context.Background(), token)
