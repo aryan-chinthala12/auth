@@ -159,7 +159,6 @@ func (a *Auth) startOTPCleanup(ctx context.Context) {
 	}()
 }
 
-/* OTPExists reports whether a valid OTP is still present for the given email address. */
 func (a *Auth) OTPExists(ctx context.Context, userEmail string) (bool, error) {
 	if _, err := mail.ParseAddress(userEmail); err != nil {
 		return false, ErrInvalidEmail
@@ -183,7 +182,6 @@ func (a *Auth) OTPExists(ctx context.Context, userEmail string) (bool, error) {
 	return true, nil
 }
 
-/* ListActiveOTPs returns a paginated list of active OTP email addresses. */
 func (a *Auth) ListActiveOTPs(ctx context.Context, limit, offset int) ([]string, error) {
 	if a.storage == nil {
 		return nil, ErrDatabaseUnavailable
