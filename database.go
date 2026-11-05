@@ -140,7 +140,7 @@ func (p *PostgresStorage) CheckTables(ctx context.Context) error {
 			password_hash TEXT NOT NULL,
 			salt TEXT NOT NULL,
 			otp_hash TEXT NOT NULL,
-			expires_at TIMESTAMP NOT NULL
+			expires_at TIMESTAMPTZ NOT NULL
 		);
 		CREATE TABLE IF NOT EXISTS roles (
 			role TEXT PRIMARY KEY
@@ -174,14 +174,15 @@ func (p *PostgresStorage) CheckTables(ctx context.Context) error {
 /*
 checkExpiryColumns returns ErrSchemaOutdated if an expiry column is still a plain TIMESTAMP.
 CREATE TABLE IF NOT EXISTS leaves old tables untouched, and their rows hold the host's
-local time, so the operator must convert them: run migrations/001_expiry_timestamptz.sql.
+local time, so the operator must convert them with migrations/001_expiry_timestamptz.sql
+or migrations/002_pending_email_expiry_timestamptz.sql, as indicated by the affected table.
 */
 func (p *PostgresStorage) checkExpiryColumns(ctx context.Context) error {
 	rows, err := p.pool.Query(ctx, `
 		SELECT table_name::text, data_type::text
 		FROM information_schema.columns
 		WHERE table_schema = current_schema()
-		  AND table_name IN ('otps', 'refresh_tokens')
+		  AND table_name IN ('otps', 'refresh_tokens', 'pending_email_registrations')
 		  AND column_name = 'expires_at'`)
 	if err != nil {
 		return fmt.Errorf("failed to verify database schema: %w", err)
@@ -194,7 +195,11 @@ func (p *PostgresStorage) checkExpiryColumns(ctx context.Context) error {
 			return fmt.Errorf("failed to verify database schema: %w", err)
 		}
 		if dataType != "timestamp with time zone" {
-			return fmt.Errorf("%w: %s.expires_at is %q, expected \"timestamp with time zone\"; run migrations/001_expiry_timestamptz.sql", ErrSchemaOutdated, table, dataType)
+			migration := "migrations/001_expiry_timestamptz.sql"
+			if table == "pending_email_registrations" {
+				migration = "migrations/002_pending_email_expiry_timestamptz.sql"
+			}
+			return fmt.Errorf("%w: %s.expires_at is %q, expected \"timestamp with time zone\"; run %s", ErrSchemaOutdated, table, dataType, migration)
 		}
 	}
 	return rows.Err()
@@ -299,7 +304,7 @@ func (p *PostgresStorage) CreatePendingEmailRegistration(ctx context.Context, em
 			password_hash = EXCLUDED.password_hash,
 			salt = EXCLUDED.salt,
 			otp_hash = EXCLUDED.otp_hash,
-			expires_at = EXCLUDED.expires_at`, email, hash, salt, otpHash, expiresAt)
+			expires_at = EXCLUDED.expires_at`, email, hash, salt, otpHash, expiresAt.UTC())
 	return err
 }
 
@@ -328,7 +333,7 @@ func (p *PostgresStorage) CompletePendingEmailRegistration(ctx context.Context, 
 	if subtle.ConstantTimeCompare([]byte(storedOTPHash), []byte(otpHash)) != 1 {
 		return ErrInvalidOTP
 	}
-	if !now.Before(expiresAt) {
+	if !now.UTC().Before(expiresAt.UTC()) {
 		return ErrOTPExpired
 	}
 	if _, err := tx.Exec(ctx, `
