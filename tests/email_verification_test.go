@@ -84,6 +84,51 @@ func TestIntegrationEmailRegistrationCreatesAccountOnlyAfterCorrectOTP(t *testin
 	}
 }
 
+func TestIntegrationPendingRegistrationExpiryIsTimezoneSafe(t *testing.T) {
+	skipIfShort(t)
+	previousLocal := time.Local
+	loc, err := time.LoadLocation("Asia/Kolkata")
+	if err != nil {
+		t.Fatalf("failed to load non-UTC test timezone: %v", err)
+	}
+	time.Local = loc
+	t.Cleanup(func() { time.Local = previousLocal })
+
+	sender := &registrationEmailCapture{}
+	a := setupEmailRegistrationAuth(t, sender)
+	ctx := context.Background()
+	const email = "verify-timezone@example.com"
+
+	startedAt := time.Now().UTC()
+	if err := a.StartEmailRegistration(ctx, email, "StrongP@ssword123!"); err != nil {
+		t.Fatalf("failed to start registration: %v", err)
+	}
+	var expiresAt time.Time
+	var dataType string
+	db := getTestDBPool(t, ctx)
+	if err := db.QueryRow(ctx, `
+		SELECT expires_at,
+		       (SELECT data_type FROM information_schema.columns
+		        WHERE table_schema = current_schema()
+		          AND table_name = 'pending_email_registrations'
+		          AND column_name = 'expires_at')
+		FROM pending_email_registrations WHERE user_id = $1`, email).Scan(&expiresAt, &dataType); err != nil {
+		t.Fatalf("failed to load pending expiry: %v", err)
+	}
+	if dataType != "timestamp with time zone" {
+		t.Fatalf("expected TIMESTAMPTZ expiry, got %q", dataType)
+	}
+	if expiresAt.UTC().Before(startedAt.Add(4*time.Minute)) || expiresAt.UTC().After(time.Now().UTC().Add(6*time.Minute)) {
+		t.Fatalf("pending expiry is not the expected UTC instant: got %s", expiresAt.UTC())
+	}
+	if _, err := db.Exec(ctx, "UPDATE pending_email_registrations SET expires_at = $1 WHERE user_id = $2", time.Now().UTC().Add(-time.Minute), email); err != nil {
+		t.Fatalf("failed to set expired pending registration: %v", err)
+	}
+	if err := a.CompleteEmailRegistration(ctx, email, sender.code); !errors.Is(err, auth.ErrOTPExpired) {
+		t.Fatalf("expected expired OTP after UTC expiry comparison, got %v", err)
+	}
+}
+
 func TestIntegrationEmailRegistrationRejectsWrongOTP(t *testing.T) {
 	skipIfShort(t)
 	sender := &registrationEmailCapture{}
@@ -116,7 +161,7 @@ func TestIntegrationEmailRegistrationRejectsExpiredOTP(t *testing.T) {
 	if err := a.StartEmailRegistration(ctx, email, "StrongP@ssword123!"); err != nil {
 		t.Fatalf("failed to start registration: %v", err)
 	}
-	if _, err := getTestDBPool(t, ctx).Exec(ctx, "UPDATE pending_email_registrations SET expires_at = $1 WHERE user_id = $2", time.Now().Add(-time.Minute), email); err != nil {
+	if _, err := getTestDBPool(t, ctx).Exec(ctx, "UPDATE pending_email_registrations SET expires_at = $1 WHERE user_id = $2", time.Now().UTC().Add(-time.Minute), email); err != nil {
 		t.Fatalf("failed to expire pending OTP: %v", err)
 	}
 	if err := a.CompleteEmailRegistration(ctx, email, sender.code); !errors.Is(err, auth.ErrOTPExpired) {
